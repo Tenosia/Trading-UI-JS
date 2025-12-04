@@ -3,61 +3,78 @@ import { Order, OrderStatus } from './Order';
 import { roundTo } from '../utils/utils';
 
 class MarketMaker {
-    constructor(ob, symbol, client_id, ms_ack_event = null, px = null, default_qty = null, width = 4) {
+    constructor(ob, symbol, clientId, msAckEvent = null, px = null, defaultQty = null, width = 4) {
         this.symbol = symbol;
-        this.client_id = client_id;
-        this.default_qty = default_qty;
+        this.clientId = clientId;
+        this.defaultQty = defaultQty;
         this.px = px;
-        this.qty = default_qty;
+        this.qty = defaultQty;
         this.width = width;
-        this.tick_sz = 0.01;
-        this.ob_new_event = ob.new_event;
-        this.ob_modify_event = ob.modify_event;
-        this.ob_cancel_event = ob.cancel_event;
-        this.ms_ack_event = ms_ack_event;
-        this.ack_event = new AsyncDataEvent();
-        this.is_auto = !ms_ack_event;
+        this.tickSz = 0.01;
+        this.obNewEvent = ob.new_event;
+        this.obModifyEvent = ob.modify_event;
+        this.obCancelEvent = ob.cancel_event;
+        this.msAckEvent = msAckEvent;
+        this.ackEvent = new AsyncDataEvent();
+        this.isAuto = !msAckEvent;
         this.bid = null;
         this.ask = null;
-        this.run = true;
+        this.running = true;
+
+        // Bind methods
+        this.handleAck = this.handleAck.bind(this);
     }
 
     async start() {
-        console.log("MM: Starting mm ", this.client_id, this.is_auto);
-        this.wait_ack_promise = this.wait_ack(this.ack_event);
-        if (this.is_auto) {
-            this.manage_orders_promise = await this.manage_orders_loop();
+        this.waitAckPromise = this.waitAck(this.ackEvent);
+        if (this.isAuto) {
+            this.manageOrdersPromise = this.manageOrdersLoop();
         }
     }
 
-    place_new_order(side, px, qty) {
-        console.log("MM:", this.client_id, " place_new_order: ", side, px, qty);
-        let order = new Order(side, px, qty, this.client_id, this.ack_event, !this.is_auto);
+    stop() {
+        this.running = false;
+    }
+
+    placeNewOrder(side, px, qty) {
+        const order = new Order(side, px, qty, this.clientId, this.ackEvent, !this.isAuto);
         order.status = OrderStatus.PENDING;
-        if (side == 'Buy')
+        if (side === 'Buy') {
             this.bid = order;
-        else
+        } else {
             this.ask = order;
-        this.ob_new_event.set(order);
+        }
+        this.obNewEvent.set(order);
     }
 
-    async modify_order(order_id, new_px, new_qty = null) {
-        this.ob_modify_event.set([order_id, new_px, new_qty]);
+    // Legacy method names for compatibility
+    place_new_order(side, px, qty) {
+        return this.placeNewOrder(side, px, qty);
     }
 
-    async cancel_order(order_id) {
-        this.ob_cancel_event.set(order_id);
+    modifyOrder(orderId, newPx, newQty = null) {
+        this.obModifyEvent.set([orderId, newPx, newQty]);
     }
 
-    async wait_ack(e) {
-        console.log(`MM Awaiting ack event set: ${e}`);
-        while (this.run) {
-            await e.waitRun(this.handle_ack.bind(this));
-            // e.clear();
+    modify_order(orderId, newPx, newQty = null) {
+        return this.modifyOrder(orderId, newPx, newQty);
+    }
+
+    cancelOrder(orderId) {
+        this.obCancelEvent.set(orderId);
+    }
+
+    cancel_order(orderId) {
+        return this.cancelOrder(orderId);
+    }
+
+    async waitAck(event) {
+        while (this.running) {
+            await event.waitRun(this.handleAck);
         }
     }
 
-    async handle_ack(ack) {
+    async handleAck(ack) {
         try {
             ack.order.status = ack.status;
             switch (ack.status) {
@@ -74,50 +91,51 @@ class MarketMaker {
                 case OrderStatus.FULLY_FILLED:
                     if (ack.order.side === 'Buy') {
                         this.bid = null;
-                        // this.place_new_order('Buy', bidPx, this.qty);
                     } else {
                         this.ask = null;
-                        // this.place_new_order('Sell', bidPx, this.qty);
-                    } 
+                    }
+                    break;
+                default:
+                    break;
             }
-            if (this.ms_ack_event) {
-                // console.log("MM: handleAck: setting MS ack event", ack.status, ack);
-                this.ms_ack_event.set(ack);
+            if (this.msAckEvent) {
+                this.msAckEvent.set(ack);
             }
         } catch (ex) {
-            console.error(ex);
-            console.trace();
+            console.error('MarketMaker handleAck error:', ex);
         }
     }
 
-    async manage_orders_loop() {
-        console.log("MM: Managing orders");
-        while (this.run) {
-            await this.manage_orders();
+    async manageOrdersLoop() {
+        while (this.running) {
+            await this.manageOrders();
         }
     }
 
-    async manage_orders() {
+    async manageOrders() {
         try {
-            // console.log("MM:", this.client_id, " Managing orders: ", this.bid ? this.bid.toString() : 'No Bid', this.ask ? this.ask.toString() : "No Ask");
             const min = this.width / 2 - 1;
             const max = this.width / 2 + 1;
             const bidTicks = Math.floor(Math.random() * ((max - min) + 1)) + min;
-            const bidPx = roundTo(this.px - (bidTicks * this.tick_sz), 2);
-            const askPx = bidPx + (this.width * this.tick_sz);
+            const bidPx = roundTo(this.px - (bidTicks * this.tickSz), 2);
+            const askPx = roundTo(bidPx + (this.width * this.tickSz), 2);
             this.px = (bidPx + askPx) / 2;
-            if (!this.bid) 
-                this.place_new_order('Buy', bidPx, this.qty);
-            else if (this.bid.status != OrderStatus.PENDING)
-                this.modify_order(this.bid.id, bidPx, this.bid.qty);
-            if (!this.ask) 
-                this.place_new_order('Sell', askPx, this.qty);
-            else if (this.bid.status != OrderStatus.PENDING)
-                this.modify_order(this.ask.id, askPx, this.ask.qty);
+
+            if (!this.bid) {
+                this.placeNewOrder('Buy', bidPx, this.qty);
+            } else if (this.bid.status !== OrderStatus.PENDING) {
+                this.modifyOrder(this.bid.id, bidPx, this.bid.qty);
+            }
+
+            if (!this.ask) {
+                this.placeNewOrder('Sell', askPx, this.qty);
+            } else if (this.ask.status !== OrderStatus.PENDING) {
+                this.modifyOrder(this.ask.id, askPx, this.ask.qty);
+            }
+
             await new Promise(resolve => setTimeout(resolve, 1000));
         } catch (ex) {
-            console.error(ex);
-            console.trace();
+            console.error('MarketMaker manageOrders error:', ex);
         }
     }
 }

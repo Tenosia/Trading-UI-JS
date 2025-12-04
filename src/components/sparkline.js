@@ -1,66 +1,57 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Sparklines, SparklinesLine, SparklinesArea, SparklinesBars, SparklinesSpots } from 'react-sparklines';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { Sparklines, SparklinesLine, SparklinesSpots } from 'react-sparklines';
 import '../App.css';
 import { useInstrument } from './InstrumentContext';
 
-function dataExists(props) {
-    return (props != null 
-        && props != undefined 
-        && ('sharedData' in props) 
-        && props.sharedData != null 
-        && props.sharedData != undefined);
-}
-
-let lastDataSize = 0;
-
-function Sparkline(props) {
+const Sparkline = React.memo(function Sparkline(props) {
     const { data: instrument } = useInstrument();
-    const [data, setData] = useState([]);
     const [sparkData, setSparkData] = useState([]);
-    const [lastData, setLastData] = useState(null);
+    const lastDataSizeRef = useRef(0);
+
+    const dataExists = useMemo(() => {
+        return props?.sharedData?.sparkData !== null && props?.sharedData?.sparkData !== undefined;
+    }, [props?.sharedData?.sparkData]);
 
     useEffect(() => {
-        if (dataExists(props)) {
-            setData(props.sharedData);
+        if (dataExists && props.sharedData.sparkData.length > lastDataSizeRef.current) {
+            const newDataPoint = props.sharedData.sparkData[props.sharedData.sparkData.length - 1];
+            lastDataSizeRef.current = props.sharedData.sparkData.length;
+            setSparkData(prev => [...prev, newDataPoint]);
         }
-    },);
+    }, [dataExists, props?.sharedData?.sparkData]);
 
-    useEffect(() => {
-        if  (dataExists(props) && data.sparkData.length > lastDataSize) {
-            lastDataSize = data.sparkData.length;
-            setSparkData([...sparkData, data.sparkData[data.sparkData.length-1]]); 
-            setLastData(data.sparkData[data.sparkData.length-1]);
-        }
-    },[data]);
-
-    const style = {
+    const style = useMemo(() => ({
         backgroundColor: "rgb(95, 95, 95)",
         width: "100%",
-        height:"100%",
+        height: "100%",
         borderTop: 0,
         borderLeft: "1px solid black",
         borderRight: "1px solid black",
-    };
+    }), []);
 
-    // if (! dataExists(props) || !instrument)
-    // {
-    //     console.log("Sparkline: Null/undefined data");
-    //     return (<div className='dkGreyBg' style={style}></div>);
-    // }
+    const lastData = sparkData.length > 0 ? sparkData[sparkData.length - 1] : null;
+    const openingPx = instrument?.openingPx ?? lastData;
 
-    const openingPx = instrument ? instrument.openingPx : lastData;
+    const lineColor = useMemo(() => {
+        if (lastData === null || openingPx === null) return "#FFFFFF";
+        if (lastData === openingPx) return "#FFFFFF";
+        return lastData > openingPx ? "#90ff81" : "#ff6767";
+    }, [lastData, openingPx]);
+
+    const lineStyle = useMemo(() => ({
+        strokeWidth: 0.5,
+        stroke: lineColor,
+        fill: "none"
+    }), [lineColor]);
 
     return (
         <div className='dkGreyBg' style={style}>
             <Sparklines data={sparkData} limit={50} width={100} height={20} margin={5}>
-                <SparklinesLine 
-                    style={{ strokeWidth: 0.5, stroke: (lastData == openingPx ? "#FFFFFF" : lastData > openingPx ? "#90ff81" : "#ff6767"), fill: "none"}} 
-                    // style={{ strokeWidth: 0.5, fill: (lastData == instrumentData.openingPx ? "#FFFFFF" : lastData > instrumentData.openingPx ? "#90ff81" : "#ff6767"), stroke: "white"}} 
-                />  
-                <SparklinesSpots size={0}/>
+                <SparklinesLine style={lineStyle} />
+                <SparklinesSpots size={0} />
             </Sparklines>
         </div>
     );
-}
+});
 
 export default Sparkline;

@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback, useMemo } from 'react';
 import InstrumentLevel from './InstrumentLevel';
-import { roundTo, getPxString, handleRender } from '../utils/utils'
+import { handleRender } from '../utils/utils';
 import { Profiler } from 'react';
 import { useInstrument } from './InstrumentContext';
-import Splitter from './SplitContainer';
 
 function InstrumentLevelView(props) {
     const { data: instrument } = useInstrument();
@@ -13,57 +12,64 @@ function InstrumentLevelView(props) {
     const ilvRef = useRef(null);
     const scrollYRef = useRef(0);
 
-    const haveValidData = () => {
+    const haveValidData = useMemo(() => {
         return (
-            instrument
-            && props != null 
-            && props != undefined 
-            && 'sharedData' in props
-            && props.sharedData != null 
-            && props.sharedData != undefined
-        )
-    }
+            instrument !== null &&
+            instrument !== undefined &&
+            props?.sharedData?.levels !== null &&
+            props?.sharedData?.levels !== undefined
+        );
+    }, [instrument, props?.sharedData?.levels]);
 
-    useEffect(() => {
-        adjustScroll();
-    },);
-
-    const handleScroll = (e) => {
-        if (ilvcRef.current) {
-            scrollYRef.current = ilvcRef.current.scrollTop;
-        }
-    };
-
-    const adjustScroll = () => {
-        if (haveValidData()) {
-            if (rowCountRef.current != null) {
-                if (Object.keys(props.sharedData.levels).length > rowCountRef.current) {
-                    const newRowCount = Object.keys(props.sharedData.levels).filter(px => px > highLevelRef.current).length;
-                    const h1 = parseFloat(getComputedStyle(ilvRef.current).height);
-                    const rowHeight = 17.5; //h1 / rowCountRef.current;
+    const adjustScroll = useCallback(() => {
+        if (haveValidData && ilvcRef.current && ilvRef.current) {
+            if (rowCountRef.current !== null) {
+                const levelKeys = Object.keys(props.sharedData.levels);
+                if (levelKeys.length > rowCountRef.current) {
+                    const newRowCount = levelKeys.filter(px => px > highLevelRef.current).length;
+                    const rowHeight = 17.5;
                     ilvcRef.current.scrollTop = scrollYRef.current + (newRowCount * rowHeight);
                 }
             }
-            rowCountRef.current = Object.keys(props.sharedData.levels).length;
-            highLevelRef.current = Object.keys(props.sharedData.levels).sort((a, b) => b - a)[0];
+            const levelKeys = Object.keys(props.sharedData.levels);
+            rowCountRef.current = levelKeys.length;
+            highLevelRef.current = levelKeys.sort((a, b) => b - a)[0];
         }
-    };
+    }, [haveValidData, props?.sharedData?.levels]);
 
-    const containerStyle = {
+    useEffect(() => {
+        adjustScroll();
+    }, [adjustScroll]);
+
+    const handleScroll = useCallback(() => {
+        if (ilvcRef.current) {
+            scrollYRef.current = ilvcRef.current.scrollTop;
+        }
+    }, []);
+
+    const containerStyle = useMemo(() => ({
         overflow: "auto",
         height: "100%",
-        widrth: '100%',
+        width: '100%',
         backgroundColor: "dimgray",
         margin: 0,
         padding: 0
+    }), []);
+
+    const sortedLevels = useMemo(() => {
+        if (!haveValidData) return [];
+        return Object.keys(props.sharedData.levels).sort((a, b) => b - a);
+    }, [haveValidData, props?.sharedData?.levels]);
+
+    if (!haveValidData) {
+        return <div>Waiting for data</div>;
     }
 
     return (
-        haveValidData() ?
         <Profiler id="Table" onRender={handleRender}>
             <div className='ilv_container hide-scrollbar' ref={ilvcRef} style={containerStyle} onScroll={handleScroll}>
                 <div key="InstrumentLevelView" className="InstrumentLevelView" ref={ilvRef}>
-                    {Object.keys(props.sharedData.levels).sort((a, b) => b - a).map((px) => (
+                    {sortedLevels.map((px) => (
                         <InstrumentLevel 
                             key={`Row:${px}`}
                             level={props.sharedData.levels[px]} 
@@ -73,8 +79,7 @@ function InstrumentLevelView(props) {
                     ))}
                 </div>
             </div>
-        </Profiler> :
-        <div>Waiting for data</div>
+        </Profiler>
     );
 }
 

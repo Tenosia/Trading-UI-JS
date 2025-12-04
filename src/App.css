@@ -1,8 +1,9 @@
+/* App-wide Utility Classes */
 .dkGreyBg {
-  background-color: rgb(95, 95, 95);
+  background-color: #5f5f5f;
 }
 
 .InstrumentLevelViewContainer {
-  height: 1vh;
-  /* overflow: auto; */
+  height: 100%;
+  overflow: hidden;
 }
