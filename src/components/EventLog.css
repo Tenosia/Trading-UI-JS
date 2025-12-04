@@ -1,22 +1,30 @@
+/* Event Log Entry Styles */
 .entry {
-    padding: 0;
-    margin: 0;
-    font-size: 10px;
-    line-height: 13px;
-    background-color: transparent;
+  padding: 0 4px;
+  margin: 0;
+  font-size: 10px;
+  line-height: 13px;
+  background-color: transparent;
+  font-family: 'Consolas', 'Monaco', monospace;
 }
-.entry.A {
-    color: black;
+
+.entry.logon {
+  color: #666;
 }
+
 .entry.new {
-    color: black;
+  color: #000;
 }
+
 .entry.modify {
-    color: blue;
+  color: #0066cc;
 }
-.entry.cancel{
-    color: firebrick;
+
+.entry.cancel {
+  color: #b22222;
 }
-.fill {
-    color: green;
+
+.entry.fill {
+  color: #228b22;
+  font-weight: 500;
 }

@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Profiler } from 'react';
-import { roundTo, getPxString, handleRender, AreArraysIndexEqual } from '../utils/utils'
+import React, { useCallback, useMemo } from 'react';
+import { getPxString, AreArraysIndexEqual } from '../utils/utils';
 import { useInstrument } from './InstrumentContext';
 
 const InstrumentLevel_MyBids = React.memo(function InstrumentLevel_MyBids(props) {
@@ -8,110 +7,127 @@ const InstrumentLevel_MyBids = React.memo(function InstrumentLevel_MyBids(props)
     const level = props.level;
     const px = level.px;
     const qty = level.myBidQty;
-    const dragBids = (event) => { 
+
+    const dragBids = useCallback((event) => { 
         event.dataTransfer.setData('application/json', JSON.stringify(level.myBids));
         event.dataTransfer.effectAllowed = 'move'; 
-        // event.dataTransfer.items.add("JSON.stringify(level.myBids)", 'text/plain');
-        console.log('Dragging from ', px);
-    }
-    const handleDragOver = (event) => {
+    }, [level.myBids]);
+
+    const handleDragOver = useCallback((event) => {
         event.preventDefault();
-    }
-    const dropBids = (event) => {
+    }, []);
+
+    const dropBids = useCallback((event) => {
         event.preventDefault();
         const droppedData = event.dataTransfer.getData('application/json');
         const items = JSON.parse(droppedData);
-        console.log('Dropped Bids:', items, ' at ', px);
-        Object.values(items).map((order, index) => {
-            instrument.wsSend({35:'G',49:instrument.clientId,11:order.id,44:px})
+        Object.values(items).forEach((order) => {
+            instrument.wsSend({ 35: 'G', 49: instrument.clientId, 11: order.id, 44: px });
         });
-    }
-    const handleRightClick = (event) => {
-        console.log('Cancelled bids at:', px);
+    }, [instrument, px]);
+
+    const handleRightClick = useCallback((event) => {
         event.preventDefault();
-        Object.values(level.myBids).map((order, index) => (
-            instrument.wsSend({35:'F',49:instrument.clientId,11:order.id})
-          ));
-    };
+        Object.values(level.myBids).forEach((order) => {
+            instrument.wsSend({ 35: 'F', 49: instrument.clientId, 11: order.id });
+        });
+    }, [instrument, level.myBids]);
+
     return (
-        // <Profiler id={`TD:${px}.myBid`} onRender={handleRender}>
-            <div 
-                onContextMenu={handleRightClick}
-                draggable="true"
-                onDragStart={dragBids} 
-                onDragOver={handleDragOver} 
-                onDrop={dropBids}
-                key={`myBid:${px}`} 
-                className={`myBid${qty != 0 ? 'Qty' : ''}`}>
-                {qty === 0 ? '' : qty}
-            </div>
-        // </Profiler>
-    )
-}, (prevProps, nextProps) => { // Is re-render unneeded
-    return false;
-    // return (
-    //     prevProps.level.px == nextProps.level.px &&
-    //     prevProps.level.myBidQty == nextProps.level.myBidQty
-    // )
-    // return AreArraysIndexEqual([...Object.values(prevProps)], [...Object.values(nextProps)]);
+        <div 
+            onContextMenu={handleRightClick}
+            draggable="true"
+            onDragStart={dragBids} 
+            onDragOver={handleDragOver} 
+            onDrop={dropBids}
+            key={`myBid:${px}`} 
+            className={`myBid${qty !== 0 ? 'Qty' : ''}`}
+        >
+            {qty === 0 ? '' : qty}
+        </div>
+    );
+}, (prevProps, nextProps) => {
+    return (
+        prevProps.level.px === nextProps.level.px &&
+        prevProps.level.myBidQty === nextProps.level.myBidQty &&
+        Object.keys(prevProps.level.myBids).length === Object.keys(nextProps.level.myBids).length
+    );
 });
 
 const InstrumentLevel_Bid = React.memo(function InstrumentLevel_Bid(props) {
     const { data: instrument } = useInstrument();
-    const px = props.px;
-    const qty = props.qty;
-    const mdBidClick = () => { console.log('Clicked md bids:', px, instrument.clientId, instrument.wsSend); instrument.wsSend({49:instrument.clientId,35:'D',38:10,44:px})};
+    const { px, qty } = props;
+
+    const mdBidClick = useCallback(() => {
+        instrument.wsSend({ 49: instrument.clientId, 35: 'D', 38: 10, 44: px });
+    }, [instrument, px]);
+
     return (
-        // <Profiler id={`TD:${px}.Bid`} onRender={handleRender}>
-            <div key={`Bid:${px}`} onClick={() => mdBidClick()} className={`mdBid${qty != null ? 'Qty' : ''}`}>{qty}</div>
-        // </Profiler>
-    )
-}, (prevProps, nextProps) => { // Is re-render unneeded
-    return AreArraysIndexEqual([...Object.values(prevProps)], [...Object.values(nextProps)]);
+        <div key={`Bid:${px}`} onClick={mdBidClick} className={`mdBid${qty !== null ? 'Qty' : ''}`}>
+            {qty}
+        </div>
+    );
+}, (prevProps, nextProps) => {
+    return prevProps.px === nextProps.px && prevProps.qty === nextProps.qty;
 });
 
 const InstrumentLevel_Px = React.memo(function InstrumentLevel_Px(props) {
     const { data: instrument } = useInstrument();
-    const px = props.level.px;
-    const isLast = props.level.last;
-    const isTraded = props.level.traded;
-    const volPct = props.level.volPct;
+    const { px, last: isLast, traded: isTraded, volPct } = props.level;
+
+    const volumeStyle = useMemo(() => ({
+        backgroundColor: 'paleGreen',
+        height: '1px',
+        width: `${volPct}%`
+    }), [volPct]);
+
+    const className = useMemo(() => {
+        if (isLast) return 'priceRow Px Last';
+        if (isTraded) return 'priceRow Px Traded';
+        return 'priceRow Px';
+    }, [isLast, isTraded]);
+
     if (isTraded && !isLast) {
         return (
-                <div key={`Px:${px}`} id={`Px:${px}`} className={`priceRow Px Traded`}>
-                    <div className="content">{getPxString(px, instrument.decimals)}</div>
-                    <div className="volume">
-                        <div style={{ backgroundColor: 'paleGreen', height: '1px', width: `${volPct}%`}}></div>
-                        <div className="empty" style={{height: '1px'}}></div>
-                    </div>
+            <div key={`Px:${px}`} id={`Px:${px}`} className="priceRow Px Traded">
+                <div className="content">{getPxString(px, instrument?.decimals)}</div>
+                <div className="volume">
+                    <div style={volumeStyle}></div>
+                    <div className="empty" style={{ height: '1px' }}></div>
                 </div>
-        )
-    }
-    return (
-        // <Profiler id={`TD:${px}.Px`} onRender={handleRender}>
-            <div key={`Px:${px}`} id={`Px:${px}`} className={`priceRow Px ${isLast ? 'Last' : (isTraded ? 'Traded' : '')}`}>
-                <span>{getPxString(px, instrument.decimals)}</span>
             </div>
-        // </Profiler>
-    )
-}, (prevProps, nextProps) => { // Is re-render unneeded
-    const p1 = [prevProps.level.px,prevProps.level.last,prevProps.level.traded,prevProps.level.volPct];
-    const p2 = [nextProps.level.px,nextProps.level.last,nextProps.level.traded,nextProps.level.volPct];
-    return AreArraysIndexEqual(p1, p2) && !nextProps.level.traded;
+        );
+    }
+
+    return (
+        <div key={`Px:${px}`} id={`Px:${px}`} className={className}>
+            <span>{getPxString(px, instrument?.decimals)}</span>
+        </div>
+    );
+}, (prevProps, nextProps) => {
+    return (
+        prevProps.level.px === nextProps.level.px &&
+        prevProps.level.last === nextProps.level.last &&
+        prevProps.level.traded === nextProps.level.traded &&
+        prevProps.level.volPct === nextProps.level.volPct
+    );
 });
 
 const InstrumentLevel_Ask = React.memo(function InstrumentLevel_Ask(props) {
     const { data: instrument } = useInstrument();
-    const px = props.px;
-    const qty = props.qty;
-    const mdAskClick = () => { console.log('Clicked md asks:', px); instrument.wsSend({49:instrument.clientId,35:'D',38:-10,44:px})};
+    const { px, qty } = props;
+
+    const mdAskClick = useCallback(() => {
+        instrument.wsSend({ 49: instrument.clientId, 35: 'D', 38: -10, 44: px });
+    }, [instrument, px]);
+
     return (
-        // <Profiler id={`TD:${px}.Ask`} onRender={handleRender}>
-            <div key={`Ask:${px}`} onClick={() => mdAskClick()} className={`mdAsk${qty != null ? 'Qty' : ''}`}>{qty}</div>
-        // </Profiler>
-    )
-}, (prevProps, nextProps) => { // Is re-render unneeded
-    return AreArraysIndexEqual([...Object.values(prevProps)], [...Object.values(nextProps)]);
+        <div key={`Ask:${px}`} onClick={mdAskClick} className={`mdAsk${qty !== null ? 'Qty' : ''}`}>
+            {qty}
+        </div>
+    );
+}, (prevProps, nextProps) => {
+    return prevProps.px === nextProps.px && prevProps.qty === nextProps.qty;
 });
 
 const InstrumentLevel_MyAsks = React.memo(function InstrumentLevel_MyAsks(props) {
@@ -119,45 +135,51 @@ const InstrumentLevel_MyAsks = React.memo(function InstrumentLevel_MyAsks(props)
     const level = props.level;
     const px = level.px;
     const qty = level.myAskQty;
-    const dragAsks = (event) => { 
+
+    const dragAsks = useCallback((event) => { 
         event.dataTransfer.setData('application/json', JSON.stringify(level.myAsks));
         event.dataTransfer.effectAllowed = 'move'; 
-        console.log('Dragging from ', px);
-    }
-    const handleDragOver = (event) => {
+    }, [level.myAsks]);
+
+    const handleDragOver = useCallback((event) => {
         event.preventDefault();
-    }
-    const dropAsks = (event) => {
+    }, []);
+
+    const dropAsks = useCallback((event) => {
         event.preventDefault();
         const droppedData = event.dataTransfer.getData('application/json');
         const items = JSON.parse(droppedData);
-        Object.values(items).map((order, index) => (
-            instrument.wsSend({35:'G',49:instrument.clientId,11:order.id,44:px})
-        ));
-    }
-    const handleRightClick = (event) => {
+        Object.values(items).forEach((order) => {
+            instrument.wsSend({ 35: 'G', 49: instrument.clientId, 11: order.id, 44: px });
+        });
+    }, [instrument, px]);
+
+    const handleRightClick = useCallback((event) => {
         event.preventDefault();
-        Object.values(level.myAsks).map((order, index) => (
-            instrument.wsSend({35:'F',49:instrument.clientId,11:order.id})
-          ));
-    };
+        Object.values(level.myAsks).forEach((order) => {
+            instrument.wsSend({ 35: 'F', 49: instrument.clientId, 11: order.id });
+        });
+    }, [instrument, level.myAsks]);
+
     return (
-        // <Profiler id={`TD:${px}.myAsk`} onRender={handleRender}>
-            <div 
-                onContextMenu={handleRightClick}
-                draggable="true"
-                onDragStart={dragAsks} 
-                onDragOver={handleDragOver} 
-                onDrop={dropAsks} 
-                key={`myAsk:${px}`} 
-                className={`myAsk${qty != 0 ? 'Qty' : ''}`}
-            >
-                {qty === 0 ? '' : qty}
-            </div>
-        // </Profiler>
-    )
-}, (prevProps, nextProps) => { // Is re-render unneeded
-    return AreArraysIndexEqual([...Object.values(prevProps)], [...Object.values(nextProps)]);
+        <div 
+            onContextMenu={handleRightClick}
+            draggable="true"
+            onDragStart={dragAsks} 
+            onDragOver={handleDragOver} 
+            onDrop={dropAsks} 
+            key={`myAsk:${px}`} 
+            className={`myAsk${qty !== 0 ? 'Qty' : ''}`}
+        >
+            {qty === 0 ? '' : qty}
+        </div>
+    );
+}, (prevProps, nextProps) => {
+    return (
+        prevProps.level.px === nextProps.level.px &&
+        prevProps.level.myAskQty === nextProps.level.myAskQty &&
+        Object.keys(prevProps.level.myAsks).length === Object.keys(nextProps.level.myAsks).length
+    );
 });
 
 const InstrumentLevel = React.memo(function InstrumentLevel(props) {

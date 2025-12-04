@@ -1,8 +1,7 @@
-import { useEffect, useState, useRef, useContext, useReducer  } from 'react';
+import { useEffect, useRef, useReducer, useCallback } from 'react';
 import WebSocketManager from './WebSocketManager';
-import { roundTo, getMid } from '../utils/utils'
+import { roundTo, getMid } from '../utils/utils';
 import { useInstrument } from './InstrumentContext';
-import { InstrumentContext } from './InstrumentContext';
 
 class Level {
     constructor({proto=null, args=null}) {
@@ -181,20 +180,19 @@ class StateUpdater{
     }
 
     updateLastTradePx(newState, px, sz, dt) {
-        if (newState.lastTradePrice != null && newState.lastTradePrice != undefined && newState.lastTradePrice in newState.levels)
+        if (newState.lastTradePrice !== null && newState.lastTradePrice !== undefined && newState.lastTradePrice in newState.levels) {
             newState.levels[newState.lastTradePrice].last = false;
+        }
         newState.levels[px].last = true;
         newState.levels[px].traded = true;
-        console.log(`DM: Setting traded to true for ${px}`, newState.levels[px].traded);
         newState.lastTradePrice = px;
         newState.tradedPxs[px] = dt;
         newState.volume += sz;
-        newState.levels[px].volume += sz
-        Object.keys(newState.tradedPxs).map((p) => {
+        newState.levels[px].volume += sz;
+        Object.keys(newState.tradedPxs).forEach((p) => {
             newState.levels[p].volPct = newState.levels[p].volume / newState.volume * 100.0;
         });
-        console.log("Px: ", px, "Sz: ", sz, "vol:",newState.levels[px].volume, "Total vol: ", newState.volume, "volPct: ", newState.levels[px].volPct);
-    };
+    }
 
     updateLevel(newState, p, qtyBid, qtyAsk) {
         p = roundTo(p, this.instrumentRef.current.decimals);
@@ -324,20 +322,15 @@ class StateUpdater{
     }
 
     processFill(newState, exRpt) {
-        console.log('Fill: ', exRpt[38], '@', exRpt[44], exRpt[52]);
         const orderId = exRpt[11];
         const px = exRpt[44];
-        if (exRpt[39] == 2) { // full fill
+        if (exRpt[39] === 2) { // full fill
             this.processCancel(newState, exRpt);
-        }
-        else if (exRpt[39] == 1) { // partial fill
+        } else if (exRpt[39] === 1) { // partial fill
             if (exRpt[54] === 1) {
-                console.log("Updating MyBids due to partial fill at ", px);
                 newState.levels[px].myBids[orderId].qty -= exRpt[38];
-            }
-            else {
-                console.log("Updating MyAsks due to partial fill at ", px);
-                newState.levels[px].myAsks[orderId] -= exRpt[38];
+            } else {
+                newState.levels[px].myAsks[orderId].qty -= exRpt[38];
             }
             newState.levels[px].myBidQty = Object.values(newState.levels[px].myBids).reduce((acc, obj) => acc + obj.qty, 0);
             newState.levels[px].myAskQty = Object.values(newState.levels[px].myAsks).reduce((acc, obj) => acc + obj.qty, 0);
@@ -346,16 +339,16 @@ class StateUpdater{
 
 }
 
-function DataManager({url, onDataChange}) {
-    const { data: instrument, update: updateInstrument, callbacks: callbacks } = useInstrument();
+function DataManager({ onDataChange }) {
+    const { data: instrument, update: updateInstrument, callbacks } = useInstrument();
     const instrumentRef = useRef(instrument);
-
-    const stateUpdaterRef = useRef(null);
-    if (stateUpdaterRef.current === null)
-        stateUpdaterRef.current = new StateUpdater(instrumentRef, callbacks);
-    const stateUpdater = stateUpdaterRef.current;
-
     const webSocketManagerRef = useRef(null);
+    const stateUpdaterRef = useRef(null);
+
+    // Initialize stateUpdater only once
+    if (stateUpdaterRef.current === null) {
+        stateUpdaterRef.current = new StateUpdater(instrumentRef, callbacks);
+    }
 
     const initialState = {
         symbol: null,
@@ -382,19 +375,19 @@ function DataManager({url, onDataChange}) {
         wsSend: null
     };
 
-    const [state, dispatch] = useReducer(stateUpdater.updateState.bind(stateUpdater), initialState);
+    const [state, dispatch] = useReducer(stateUpdaterRef.current.updateState.bind(stateUpdaterRef.current), initialState);
 
     useEffect(() => {
         onDataChange(state);
     }, [state, onDataChange]);
 
     useEffect(() => {
-        if (instrument != null) {
+        if (instrument !== null) {
             instrumentRef.current = instrument;
         }
     }, [instrument]);
 
-    const updateInstrumentContext = (msg)  => {
+    const updateInstrumentContext = useCallback((msg) => {
         if (msg[35] === 'd') {
             instrumentRef.current = {
                 ...instrumentRef.current,
@@ -403,38 +396,40 @@ function DataManager({url, onDataChange}) {
                 decimals: msg[969].toString().split('').reverse().join('').indexOf('.'),
                 openingPx: msg[44],
                 currency: msg[15],
-                wsSend: webSocketManagerRef.current.sendMessage
-            }
+                wsSend: webSocketManagerRef.current?.sendMessage
+            };
             updateInstrument(instrumentRef.current);
-        }
-        else if (msg[35] === 'A') {
+        } else if (msg[35] === 'A') {
             instrumentRef.current = {
                 ...instrumentRef.current,
                 clientId: msg[56]
-            }
+            };
             updateInstrument(instrumentRef.current);
         }
-    }
+    }, [updateInstrument]);
 
-    const handleWebSocketMessage = (msg) => {
-        if (!(msg === null) && 35 in msg) {
-            updateInstrumentContext(msg); //Update Constext
-            dispatch(msg); // Update State
+    const handleWebSocketMessage = useCallback((msg) => {
+        if (msg !== null && 35 in msg) {
+            updateInstrumentContext(msg);
+            dispatch(msg);
         }
-    }
+    }, [updateInstrumentContext]);
 
     useEffect(() => {
-        console.log("initializing WebSocket connection");
-        console.log(stateUpdater);
         webSocketManagerRef.current = new WebSocketManager('ws://localhost', 8765, handleWebSocketMessage, callbacks);
         webSocketManagerRef.current.connect(true);
-    }, []);
 
-    return (
-        <></>
-        // <div style={{display: "none"}}>blah</div>
-        // <div>{data.lastDate.toString()}</div>
-    )
+        // Cleanup WebSocket on unmount
+        return () => {
+            if (webSocketManagerRef.current?.ws) {
+                if (typeof webSocketManagerRef.current.ws.close === 'function') {
+                    webSocketManagerRef.current.ws.close();
+                }
+            }
+        };
+    }, [handleWebSocketMessage, callbacks]);
+
+    return null;
 }
 
 export default DataManager;

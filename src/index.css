@@ -1,3 +1,4 @@
+/* Base Styles */
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
@@ -12,200 +13,158 @@ code {
     monospace;
 }
 
-.mdi-container {
-  background-color: #f0f0f0;
-}
-
-.mdi-document {
-  background-color:rgb(180, 180, 180);
-  width: 100%;
-  height: 100%;
-  border: 1px solid #ccc
-}
-
-.toolbar {
-padding: 10px;
-background-color: #eee;
-border-bottom: 1px solid #ccc;
-}
-
-.toolbar button {
-margin-right: 10px;
-}
-
-.window {
-background-color: white;
-box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
-}
-
-.window-header {
-background-color: #ddd;
-padding: 5px;
-cursor: move;
-display: flex;
-justify-content: space-between;
-align-items: center;
-border-bottom: 1px solid #ccc;
-}
-
-.window-controls button {
-  margin-left: 5px;
-}
-
-.window-content {
-padding: 10px;
-}
-
-.maximized {
-  top: 0 !important;
-  left: 0 !important;
-  width: 100% !important;
-  height: 100% !important;
-}
-
-/* For Webkit browsers (Chrome, Safari, Opera) */
+/* Scrollbar Utilities */
 .hide-scrollbar::-webkit-scrollbar {
   display: none;
 }
 
-/* For IE, Edge, and Firefox */
 .hide-scrollbar {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;     /* Firefox */
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
-
+/* Base Element Styles */
 div {
-  padding-top: 0px;
-  padding-bottom: 0px;
-  padding-left: 0%;
-  padding-right: 0px;
-  border-spacing: 0px;
+  padding: 0;
+  border-spacing: 0;
   border-collapse: collapse;
   user-select: none;
 }
 
-.priceRow {
-  padding-top: 0px;
-  padding-bottom: 0px;
-  padding-left: 0%;
-  padding-right: 0px;
-  border-spacing: 0px;
-  border-collapse: collapse;
-}
-
-div.LadderRow {
-  display: grid;
-  grid-template-columns: 0.65fr 0.65fr 1fr 0.65fr 0.65fr;
-  padding: 0px 0;
-  line-height: 16px;
-  border-bottom: 0px solid black;
-}
-
+/* Order Book Ladder */
 .ilv_container {
   flex: auto;
-  overflow: "auto";
-  height: "300px";
-  /* display: flex;
-  flex-direction: column; */
+  overflow: auto;
+  height: 300px;
 }
 
 .InstrumentLevelView {
   width: 100%;
   height: auto;
   max-width: 98%;
-  background-color: greenyellow;
+  background-color: #3a3a3a;
   color: #ffffff;
   font-family: Verdana, source-code-pro, Menlo, Monaco, Consolas, monospace;
   font-size: 11px;
-  /* border: 1px solid black; */
   border-spacing: 0;
   border-collapse: collapse;
 }
 
-div.myBid {
-  color: black;
-  background-color: rgb(204, 204, 204);
-  border-bottom: 1px solid rgb(176, 177, 179);
-}
-div.myBidQty {
-  color: rgb(0, 0, 0);
-  background-color: rgb(255, 255, 255);
-  text-align: right;
-  padding-right: 3px;
-  box-shadow: 
-  inset -1px -1px 0px rgb(57, 97, 145),
-  inset 1px 1px 0px rgb(57, 97, 145);
+div.LadderRow {
+  display: grid;
+  grid-template-columns: 0.65fr 0.65fr 1fr 0.65fr 0.65fr;
+  padding: 0;
+  line-height: 16px;
 }
 
-div.mdBid {
-  color: black;
-  background-color: rgb(142, 154, 168);
-  border-bottom: 1px solid rgb(176, 177, 179);
+/* My Orders - Bid Side */
+div.myBid {
+  color: #000;
+  background-color: #ccc;
+  border-bottom: 1px solid #b0b1b3;
 }
-div.mdBidQty {
-  color: rgb(255, 255, 255);
-  background-color: rgb(63, 88, 119);
+
+div.myBidQty {
+  color: #000;
+  background-color: #fff;
   text-align: right;
   padding-right: 3px;
   box-shadow: 
-    inset -1px -1px 0px rgba(0, 0, 0, 1),
-    inset 1px 1px 0px rgba(0, 0, 0, 1);
+    inset -1px -1px 0 #396191,
+    inset 1px 1px 0 #396191;
+}
+
+/* Market Depth - Bid Side */
+div.mdBid {
+  color: #000;
+  background-color: #8e9aa8;
+  border-bottom: 1px solid #b0b1b3;
+}
+
+div.mdBidQty {
+  color: #fff;
+  background-color: #3f5877;
+  text-align: right;
+  padding-right: 3px;
+  box-shadow: 
+    inset -1px -1px 0 #000,
+    inset 1px 1px 0 #000;
+}
+
+/* Price Column */
+.priceRow {
+  padding: 0;
+  border-spacing: 0;
+  border-collapse: collapse;
 }
 
 .priceRow.Px {
-  border-bottom: 1px solid black;
-  color: rgb(0, 0, 0);
-  background-color: rgb(161, 161, 161);
-  border-color: rgb(199, 199, 199); 
-  border-left: 1px solid rgb(109, 109, 109);
-  border-right: 1px solid rgb(109, 109, 109);
+  border-bottom: 1px solid #000;
+  color: #000;
+  background-color: #a1a1a1;
+  border-left: 1px solid #6d6d6d;
+  border-right: 1px solid #6d6d6d;
   text-align: center;
   padding: 0 3px;
 }
+
 .priceRow.Px.Traded {
-  color: white;
-  background-color: rgb(20, 20, 20);
+  color: #fff;
+  background-color: #141414;
 }
-/* .priceRow.Px.Traded.Content {
-  transform: translateX(1px)
-} */
+
 .priceRow.Px.Last {
-  color: black;
-  background-color: rgb(216, 216, 216);
+  color: #000;
+  background-color: #d8d8d8;
   text-align: center;
   padding: 0 3px;
   box-shadow: 
-    inset -1px -1px 0px rgba(0, 0, 0, 1),
-    inset 1px 1px 0px rgba(0, 0, 0, 1);
+    inset -1px -1px 0 #000,
+    inset 1px 1px 0 #000;
 }
 
+/* Market Depth - Ask Side */
 div.mdAsk {
-  color: black;
-  background-color: rgb(175, 146, 146);
-  border-bottom: 1px solid rgb(185, 184, 184);
-}
-div.mdAskQty {
-  color: rgb(255, 255, 255);
-  background-color: rgb(133, 83, 83);
-  text-align: left;
-  padding-left: 3px;
-  box-shadow: 
-    inset -1px -1px 0px rgba(0, 0, 0, 1),
-    inset 1px 1px 0px rgba(0, 0, 0, 1);
+  color: #000;
+  background-color: #af9292;
+  border-bottom: 1px solid #b9b8b8;
 }
 
-div.myAsk {
-  color: black;
-  background-color: rgb(204, 204, 204);
-  border-bottom: 1px solid rgb(185, 184, 184);
-}
-div.myAskQty {
-  color: rgb(0, 0, 0);
-  background-color: rgb(255, 255, 255);
+div.mdAskQty {
+  color: #fff;
+  background-color: #855353;
   text-align: left;
   padding-left: 3px;
   box-shadow: 
-  inset -1px -1px 0px rgb(134, 54, 54),
-  inset 1px 1px 0px rgb(134, 54, 54);
+    inset -1px -1px 0 #000,
+    inset 1px 1px 0 #000;
+}
+
+/* My Orders - Ask Side */
+div.myAsk {
+  color: #000;
+  background-color: #ccc;
+  border-bottom: 1px solid #b9b8b8;
+}
+
+div.myAskQty {
+  color: #000;
+  background-color: #fff;
+  text-align: left;
+  padding-left: 3px;
+  box-shadow: 
+    inset -1px -1px 0 #863636,
+    inset 1px 1px 0 #863636;
+}
+
+/* Volume Bar */
+.priceRow .volume {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  height: 100%;
+}
+
+.priceRow .content {
+  text-align: center;
 }

@@ -2,228 +2,245 @@ import { AsyncDataEvent } from "./DataEvent";
 import { OrderAck, OrderStatus, Fill } from './Order';
 
 class OrderBook {
-    constructor(symbol, ms_send) {
+    constructor(symbol, msSend) {
         this.symbol = symbol;
-        this.ms_send = ms_send
-        this.loop = null; // JavaScript doesn't have a direct equivalent to asyncio.get_event_loop()
-        this.send_book_event = new AsyncDataEvent();
-        this.send_trade_event = new AsyncDataEvent();
+        this.msSend = msSend;
+        this.sendBookEvent = new AsyncDataEvent();
+        this.sendTradeEvent = new AsyncDataEvent();
         this.new_event = new AsyncDataEvent();
         this.modify_event = new AsyncDataEvent();
         this.cancel_event = new AsyncDataEvent();
         this.bids = {};
         this.asks = {};
         this.ordersById = {};
+        this.running = true;
+
+        // Bind methods
+        this.newOrder = this.newOrder.bind(this);
+        this.modifyOrder = this.modifyOrder.bind(this);
+        this.cancelOrder = this.cancelOrder.bind(this);
+        this.sendBook = this.sendBook.bind(this);
+        this.sendTrade = this.sendTrade.bind(this);
     }
 
     async start() {
-        console.log("OB: Starting OrderBook");
-        this.waitNewPromise = this.wait_new(this.new_event);
-        this.waitModifyPromise = this.wait_modify(this.modify_event);
-        this.waitCancelPromise = this.wait_cancel(this.cancel_event);
-        this.waitSendBookPromise = this.wait_send_book(this.send_book_event);
-        this.waitSendTradePromise = this.wait_send_trade(this.send_trade_event);
+        this.waitNewPromise = this.waitNew(this.new_event);
+        this.waitModifyPromise = this.waitModify(this.modify_event);
+        this.waitCancelPromise = this.waitCancel(this.cancel_event);
+        this.waitSendBookPromise = this.waitSendBook(this.sendBookEvent);
+        this.waitSendTradePromise = this.waitSendTrade(this.sendTradeEvent);
     }
 
-    toJson(msgType, fill = null) {
-        const bids = [].concat(...Object.keys(this.bids).sort((a, b) => b - a).map(lvl => this.bids[lvl]));
-        const asks = [].concat(...Object.keys(this.asks).sort().map(lvl => this.asks[lvl]));
+    stop() {
+        this.running = false;
+    }
 
-        let fix42 = { 35: 'W', 52: new Date().toISOString(), 55: this.symbol, 268: [] };
+    toJson(msgType) {
+        const bids = Object.keys(this.bids)
+            .sort((a, b) => b - a)
+            .flatMap(lvl => this.bids[lvl]);
+        const asks = Object.keys(this.asks)
+            .sort((a, b) => a - b)
+            .flatMap(lvl => this.asks[lvl]);
+
+        const fix42 = { 35: 'W', 52: new Date().toISOString(), 55: this.symbol, 268: [] };
+
         if (msgType === 'W') {
-            const bidPxs = [...new Set(bids.map(o => o.px))].sort((a, b) => b - a);
-            const askPxs = [...new Set(asks.map(o => o.px))].sort();
-            const bidQtys = bidPxs.map(px => bids.filter(o => o.px === px).reduce((sum, o) => sum + o.qty, 0));
-            const askQtys = askPxs.map(px => asks.filter(o => o.px === px).reduce((sum, o) => sum + o.qty, 0));
-            bidPxs.forEach((px, i) => {
-                fix42[268].push({ 269: 0, 270: px, 271: bidQtys[i] });
+            // Aggregate quantities by price level
+            const bidsByPx = new Map();
+            const asksByPx = new Map();
+
+            bids.forEach(o => {
+                bidsByPx.set(o.px, (bidsByPx.get(o.px) || 0) + o.qty);
             });
-            askPxs.forEach((px, i) => {
-                fix42[268].push({ 269: 1, 270: px, 271: askQtys[i] });
+            asks.forEach(o => {
+                asksByPx.set(o.px, (asksByPx.get(o.px) || 0) + o.qty);
+            });
+
+            [...bidsByPx.entries()].sort((a, b) => b[0] - a[0]).forEach(([px, qty]) => {
+                fix42[268].push({ 269: 0, 270: px, 271: qty });
+            });
+            [...asksByPx.entries()].sort((a, b) => a[0] - b[0]).forEach(([px, qty]) => {
+                fix42[268].push({ 269: 1, 270: px, 271: qty });
             });
         }
 
         return fix42;
     }
 
-    async wait_new(e) {
-        console.log("Awaiting new orders");
-        while (true) {
-            await e.waitRun(this.newOrder.bind(this));
-            // e.clear();
+    async waitNew(event) {
+        while (this.running) {
+            await event.waitRun(this.newOrder);
         }
     }
 
-    async newOrder(o) {
-        console.log("OB: newOrder: ", o);
-        o.status = OrderStatus.NEW;
-        this.ordersById[o.id] = o;
-        const [side, other_side] = o.side === 'Buy' ? [this.bids, this.asks] : [this.asks, this.bids];
-        if (!side[o.px]) {
-            side[o.px] = [];
+    async newOrder(order) {
+        order.status = OrderStatus.NEW;
+        this.ordersById[order.id] = order;
+        const side = order.side === 'Buy' ? this.bids : this.asks;
+
+        if (!side[order.px]) {
+            side[order.px] = [];
         }
-        side[o.px].push(o);
-        if (o.ackEvent) {
-            console.log(`${new Date().toISOString()}:: OB:Setting New Order AckEvent: ${o.ackEvent}`);
+        side[order.px].push(order);
+
+        if (order.ackEvent) {
             try {
-                o.ackEvent.set(new OrderAck(o, OrderStatus.NEW));
+                order.ackEvent.set(new OrderAck(order, OrderStatus.NEW));
             } catch (ex) {
-                console.error(ex);
-                console.trace();
-            } 
-            // finally {
-            //     o.ackEvent.clear();
-            // }
+                console.error('OrderBook newOrder ack error:', ex);
+            }
         }
-        this.match(o);
-        this.send_book_event.set();
+        this.match(order);
+        this.sendBookEvent.set();
     }
 
-    async wait_modify(e) {
-        console.log("Awaiting modifies");
-        while (true) {
-            await e.waitRun(this.modifyOrder.bind(this));
-            // e.clear();
+    async waitModify(event) {
+        while (this.running) {
+            await event.waitRun(this.modifyOrder);
         }
     }
 
     async modifyOrder(data) {
         try {
-            // console.log("OB: modifyOrder: ", data);
             let [orderId, px, qty] = data;
             if (!this.ordersById[orderId]) return;
-            const o = this.ordersById[orderId];
-            if (qty === null) qty = o.qty;
-            const [side, other_side] = o.side === 'Buy' ? [this.bids, this.asks] : [this.asks, this.bids];
-            const backOfTheLine = px !== o.px || qty > o.qty;
-            if (backOfTheLine && o.px in side) {
-                side[o.px] = side[o.px].filter(order => order !== o);
-                if (side[o.px].length === 0) {
-                    delete side[o.px];
+
+            const order = this.ordersById[orderId];
+            if (qty === null) qty = order.qty;
+
+            const side = order.side === 'Buy' ? this.bids : this.asks;
+            const backOfTheLine = px !== order.px || qty > order.qty;
+
+            if (backOfTheLine && order.px in side) {
+                side[order.px] = side[order.px].filter(o => o !== order);
+                if (side[order.px].length === 0) {
+                    delete side[order.px];
                 }
             }
-            o.px = px;
-            o.qty = qty;
-            o.status = OrderStatus.MODIFIED;
-            if (backOfTheLine && o.id in this.ordersById) {
-                if (!(o.px in side)) {
-                    side[o.px] = [];
+
+            order.px = px;
+            order.qty = qty;
+            order.status = OrderStatus.MODIFIED;
+
+            if (backOfTheLine && order.id in this.ordersById) {
+                if (!(order.px in side)) {
+                    side[order.px] = [];
                 }
-                side[o.px].push(o);
+                side[order.px].push(order);
             }
-            if (o.ackEvent) {
-                o.ackEvent.set(new OrderAck(o, OrderStatus.MODIFIED));
+
+            if (order.ackEvent) {
+                order.ackEvent.set(new OrderAck(order, OrderStatus.MODIFIED));
             }
-            this.match(o);
-            this.send_book_event.set();
+            this.match(order);
+            this.sendBookEvent.set();
         } catch (ex) {
-            console.error(ex);
-            console.trace();
+            console.error('OrderBook modifyOrder error:', ex);
         }
     }
 
-    async wait_cancel(e) {
-        console.log("Awaiting cancels");
-        while (true) {
-            await e.waitRun(this.cancelOrder.bind(this));
-            // e.clear();
+    async waitCancel(event) {
+        while (this.running) {
+            await event.waitRun(this.cancelOrder);
         }
     }
 
     async cancelOrder(orderId) {
-        console.log(`Cancel order ${orderId}`);
-        const o = this.ordersById[orderId];
-        o.status = OrderStatus.CANCELLED;
-        delete this.ordersById[o.id];
-        const [side, other_side] = o.side === 'Buy' ? [this.bids, this.asks] : [this.asks, this.bids];
-        side[o.px] = side[o.px].filter(order => order !== o);
-        if (side[o.px].length === 0) {
-            delete side[o.px];
+        const order = this.ordersById[orderId];
+        if (!order) return;
+
+        order.status = OrderStatus.CANCELLED;
+        delete this.ordersById[order.id];
+
+        const side = order.side === 'Buy' ? this.bids : this.asks;
+        if (side[order.px]) {
+            side[order.px] = side[order.px].filter(o => o !== order);
+            if (side[order.px].length === 0) {
+                delete side[order.px];
+            }
         }
-        if (o.ackEvent) {
-            o.ackEvent.set(new OrderAck(o, OrderStatus.CANCELLED));
+
+        if (order.ackEvent) {
+            order.ackEvent.set(new OrderAck(order, OrderStatus.CANCELLED));
         }
-        this.send_book_event.set();
+        this.sendBookEvent.set();
     }
 
-    fill(o, sz) {
-        console.log('OB: Fill');
-        const exec_time = new Date();
-        const [side, other_side] = o.side === 'Buy' ? [this.bids, this.asks] : [this.asks, this.bids];
-        o.qty -= sz;
-        o.filled_qty += sz;
-        let pre = 'PARTIAL';
-        if (o.qty === 0) {
-            o.status = OrderStatus.FULLY_FILLED;
-            delete this.ordersById[o.id];
-            pre = 'FULL';
-            side[o.px] = side[o.px].filter(order => order !== o);
-            if (side[o.px].length === 0) {
-                delete side[o.px];
+    fill(order, sz) {
+        const execTime = new Date();
+        const side = order.side === 'Buy' ? this.bids : this.asks;
+
+        order.qty -= sz;
+        order.filled_qty += sz;
+
+        if (order.qty === 0) {
+            order.status = OrderStatus.FULLY_FILLED;
+            delete this.ordersById[order.id];
+
+            if (side[order.px]) {
+                side[order.px] = side[order.px].filter(o => o !== order);
+                if (side[order.px].length === 0) {
+                    delete side[order.px];
+                }
             }
-            if (o.ackEvent) {
-                console.log('OB: Full fill', o);
-                o.ackEvent.set(new OrderAck(o, OrderStatus.FULLY_FILLED));
+
+            if (order.ackEvent) {
+                order.ackEvent.set(new OrderAck(order, OrderStatus.FULLY_FILLED));
             }
         } else {
-            o.status = OrderStatus.PARTIALLY_FILLED;
-            if (o.ackEvent) {
-                o.ackEvent.set(new OrderAck(o, OrderStatus.PARTIALLY_FILLED));
+            order.status = OrderStatus.PARTIALLY_FILLED;
+            if (order.ackEvent) {
+                order.ackEvent.set(new OrderAck(order, OrderStatus.PARTIALLY_FILLED));
             }
         }
-        this.send_trade_event.set(new Fill(exec_time, o.id, o.id, o.clientId, o.side, sz, o.px, o.qty === 0));
-        console.log(`${pre} FILL: ${o.clientId} ${o.side}s ${sz} @ ${o.px} ${o.qty} Remaining`);
-        this.send_book_event.set();
+
+        this.sendTradeEvent.set(new Fill(execTime, order.id, order.id, order.clientId, order.side, sz, order.px, order.qty === 0));
+        this.sendBookEvent.set();
     }
 
-    match(o) {
-        const [side, other_side] = o.side === 'Buy' ? [this.bids, this.asks] : [this.asks, this.bids];
-        const matching_orders = o.side === 'Buy' ?
-            Object.keys(this.asks).filter(k => k <= o.px).flatMap(k => this.asks[k]) :
-            Object.keys(this.bids).filter(k => k >= o.px).flatMap(k => this.bids[k]);
-        let found_matches = matching_orders.length > 0;
+    match(order) {
+        const otherSide = order.side === 'Buy' ? this.asks : this.bids;
+        const matchingOrders = order.side === 'Buy'
+            ? Object.keys(otherSide).filter(k => parseFloat(k) <= order.px).flatMap(k => otherSide[k])
+            : Object.keys(otherSide).filter(k => parseFloat(k) >= order.px).flatMap(k => otherSide[k]);
+
         let i = 0;
-        while (o.qty > 0 && i < matching_orders.length) {
-            const mo = matching_orders[i];
-            console.log(`${o} matched with ${mo}`);
-            const sz = Math.min(o.qty, mo.qty);
-            this.fill(o, sz);
-            const full_fill_mo = mo.qty - sz === 0;
-            this.fill(mo, sz);
-            if (full_fill_mo) {
+        while (order.qty > 0 && i < matchingOrders.length) {
+            const matchingOrder = matchingOrders[i];
+            const sz = Math.min(order.qty, matchingOrder.qty);
+            this.fill(order, sz);
+            const fullFillMo = matchingOrder.qty - sz === 0;
+            this.fill(matchingOrder, sz);
+            if (fullFillMo) {
                 i++;
             }
         }
     }
 
-    async wait_send_book(e) {
-        console.log('OB: Waiting to send book');
-        while (true) {
+    async waitSendBook(event) {
+        while (this.running) {
             try {
-                await e.waitRun(this.send_book.bind(this));
+                await event.waitRun(this.sendBook);
             } catch (ex) {
-                console.error(ex);
-                console.trace();
+                console.error('OrderBook waitSendBook error:', ex);
             }
-            // e.clear();
         }
     }
 
-    async send_book(data = null) {
+    async sendBook() {
         const msg = this.toJson('W');
-        this.ms_send(msg);
+        this.msSend(msg);
     }
 
-    async wait_send_trade(e) {
-        console.log('Waiting to send trades');
-        while (true) {
-            await e.waitRun(this.send_trade.bind(this));
-            // e.clear();
+    async waitSendTrade(event) {
+        while (this.running) {
+            await event.waitRun(this.sendTrade);
         }
     }
 
-    async send_trade(fill = null) {
-        // Implementation here is commented out in Python version
+    async sendTrade() {
+        // Trade dissemination can be implemented here
     }
 
     toString() {
