@@ -1,70 +1,183 @@
-# Getting Started with Create React App
+# Trading UI
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+A real-time trading simulation application featuring an interactive order book ladder, market making algorithms, and live price visualization. Built with React and featuring a Python WebSocket backend for market simulation.
 
-## Available Scripts
+## Features
 
-In the project directory, you can run:
+- **Interactive Order Book Ladder** - Visual representation of market depth with bid/ask levels
+- **Real-time Price Updates** - Live mid-price calculation and sparkline visualization
+- **Order Management** - Place, modify, and cancel orders via click and drag-and-drop
+- **Market Making Simulation** - Automated market makers that continuously quote bid/ask prices
+- **Order Matching Engine** - Full order book with price-time priority matching
+- **Event Log** - Real-time display of trading events (fills, new orders, cancels, modifies)
+- **FIX Protocol Messages** - Communication using FIX 4.2-style message format
 
-### `npm start`
+## Architecture
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+### Frontend (React)
+- **DataManager** - Central state management using React's `useReducer`, handles WebSocket messages
+- **InstrumentLevelView** - Order book ladder display with scrollable price levels
+- **InstrumentLevel** - Individual price level row with bid/ask quantities and user orders
+- **InstrumentOnDay** - Displays instrument summary (symbol, mid price, daily change)
+- **Sparkline** - Mini price chart showing recent price movement
+- **EventLog** - Trading event history display
+- **WebSocketManager** - WebSocket connection handler with local/remote mode support
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+### Backend (JavaScript/Python)
+- **MarketSimulator** - Singleton that orchestrates the simulation, can run locally in-browser
+- **OrderBook** - Central limit order book with bid/ask management and order matching
+- **MarketMaker** - Automated trading agent that maintains two-sided quotes
+- **Order** - Order representation with status tracking and acknowledgment events
 
-### `npm test`
+### Communication Flow
+```
+UI Components <-> DataManager <-> WebSocketManager <-> MarketSimulator <-> OrderBook
+                                                              |
+                                                       MarketMaker(s)
+```
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## Project Structure
 
-### `npm run build`
+```
+trading_ui/
+├── src/
+│   ├── App.js                    # Main application component
+│   ├── App.css                   # Global styles
+│   ├── index.js                  # Application entry point
+│   ├── components/
+│   │   ├── DataManager.js        # State management and WebSocket integration
+│   │   ├── WebSocketManager.js   # WebSocket connection handling
+│   │   ├── MarketSimulator.js    # Market simulation engine (JS)
+│   │   ├── OrderBook.js          # Order book implementation
+│   │   ├── MarketMaker.js        # Automated market maker
+│   │   ├── Order.js              # Order and order status definitions
+│   │   ├── DataEvent.js          # Async event handling utilities
+│   │   ├── InstrumentLevelView.js # Order book ladder container
+│   │   ├── InstrumentLevel.js    # Individual price level row
+│   │   ├── InstrumentOnDay.js    # Instrument summary display
+│   │   ├── InstrumentContext.js  # React context for instrument data
+│   │   ├── EventLog.js           # Trading event log display
+│   │   ├── sparkline.js          # Price sparkline chart
+│   │   ├── SplitContainer.js     # Resizable split panel component
+│   │   └── ...
+│   ├── utils/
+│   │   └── utils.js              # Utility functions (rounding, formatting)
+│   └── python/
+│       ├── MarketSimulator.py    # Python WebSocket server
+│       ├── OrderBook.py          # Python order book implementation
+│       ├── MarketMaker.py        # Python market maker
+│       ├── Order.py              # Python order classes
+│       └── DataEvent.py          # Python async event utilities
+├── package.json
+└── README.md
+```
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+## Installation
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+### Prerequisites
+- Node.js (v16 or higher recommended)
+- npm or yarn
+- Python 3.8+ (optional, for Python backend)
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+### Setup
 
-### `npm run eject`
+1. Clone the repository:
+```bash
+git clone https://github.com/johnson-brad-15/trading_ui.git
+cd trading_ui
+```
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+2. Install dependencies:
+```bash
+npm install
+```
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+3. (Optional) For Python backend, install Python dependencies:
+```bash
+pip install websockets asyncio
+```
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+## Usage
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+### Running with Local Simulation (Default)
 
-## Learn More
+The application runs a complete market simulation in the browser:
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+```bash
+npm start
+```
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+Open [http://localhost:3000](http://localhost:3000) to view the application.
 
-### Code Splitting
+### Running with Python WebSocket Server
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+1. Start the Python WebSocket server:
+```bash
+cd src/python
+python MarketSimulator.py
+```
 
-### Analyzing the Bundle Size
+2. Modify `WebSocketManager.js` to connect to the remote server:
+```javascript
+webSocketManagerRef.current.connect(false); // Set to false for remote connection
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+3. Start the React application:
+```bash
+npm start
+```
 
-### Making a Progressive Web App
+## Interacting with the UI
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+### Order Book Ladder
+- **Click on Bid column** - Place a buy order at that price level
+- **Click on Ask column** - Place a sell order at that price level
+- **Drag orders** - Drag your orders (MyBids/MyAsks columns) to modify price
+- **Right-click orders** - Cancel orders at that price level
 
-### Advanced Configuration
+### Price Levels
+- **Green highlight** - Last traded price
+- **Volume bar** - Shows traded volume at each price level
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+## Technologies
 
-### Deployment
+- **React 19** - UI framework
+- **React Financial Charts** - Charting library
+- **React Sparklines** - Sparkline visualization
+- **Flexlayout React** - Layout management
+- **Dockview** - Docking panel support
+- **WebSocket** - Real-time communication
+- **Python websockets** - Python WebSocket server
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+## Scripts
 
-### `npm run build` fails to minify
+| Command | Description |
+|---------|-------------|
+| `npm start` | Run development server |
+| `npm run build` | Build for production |
+| `npm test` | Run tests |
+| `npm run deploy` | Deploy to GitHub Pages |
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+## Message Protocol
+
+The application uses a FIX 4.2-inspired message format:
+
+| Tag | Description |
+|-----|-------------|
+| 35 | MsgType (d=SecDef, A=Logon, D=NewOrder, F=Cancel, G=Modify, W=MDSnapshot, 8=ExecRpt) |
+| 49 | SenderCompID (Client ID) |
+| 55 | Symbol |
+| 44 | Price |
+| 38 | OrderQty |
+| 54 | Side (1=Buy, 2=Sell) |
+| 39 | OrdStatus (0=New, 1=PartialFill, 2=Filled, 4=Canceled, 5=Replaced) |
+| 11 | ClOrdID (Order ID) |
+| 52 | SendingTime |
+
+## License
+
+This project is private.
+
+## Author
+
+[johnson-brad-15](https://github.com/johnson-brad-15)
